@@ -18,7 +18,7 @@ from llama_index.service_context import ServiceContext
 # === CONFIGURACIÓN ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
+HF_MODEL = "google/flan-t5-base"
 
 # === LOGS ===
 logging.basicConfig(
