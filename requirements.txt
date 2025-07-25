@@ -2,4 +2,5 @@ python-telegram-bot==20.6
 requests==2.31.0
 PyMuPDF==1.23.7
 python-pptx==0.6.21
-llama-index==0.10.38
+llama-index==0.9.48
+

@@ -3,41 +3,27 @@ import logging
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
-from llama_index import VectorStoreIndex, Document
-from document_loader import extraer_texto_pdf, extraer_texto_ppt
+from llama_index import GPTVectorStoreIndex, SimpleDirectoryReader
 
-# === CONFIG ===
+# === CARGAR TOKENS DESDE VARIABLES DE ENTORNO ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
 
-# === LOGGING ===
+# === CONFIGURAR LOGS ===
 logging.basicConfig(level=logging.INFO)
 
-# === CARGAR Y INDEXAR DOCUMENTOS ===
-def cargar_documentos():
-    docs = []
-    carpeta = "data"
-    for archivo in os.listdir(carpeta):
-        ruta = os.path.join(carpeta, archivo)
-        if archivo.endswith(".pdf"):
-            texto = extraer_texto_pdf(ruta)
-        elif archivo.endswith(".pptx"):
-            texto = extraer_texto_ppt(ruta)
-        else:
-            continue
-        docs.append(Document(text=texto))
-    return VectorStoreIndex.from_documents(docs)
-
-index = cargar_documentos()
+# === CARGAR E INDEXAR DOCUMENTOS ===
+documents = SimpleDirectoryReader("data").load_data()
+index = GPTVectorStoreIndex.from_documents(documents)
 query_engine = index.as_query_engine()
 
-# === MANEJADOR DE MENSAJES ===
+# === FUNCIÓN DE RESPUESTA AL USUARIO ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pregunta = update.message.text
     contexto = query_engine.query(pregunta)
 
-    prompt = f"""Contesta basándote únicamente en el siguiente reglamento:\n{contexto}\n\nPregunta: {pregunta}"""
+    prompt = f"""Responde según este reglamento:\n{contexto}\n\nPregunta: {pregunta}"""
 
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     response = requests.post(
@@ -54,11 +40,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(respuesta)
 
-# === ARRANCAR BOT ===
+# === INICIAR BOT ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot desplegado.")
+    print("Bot funcionando correctamente.")
     app.run_polling()
 
 if __name__ == '__main__':
