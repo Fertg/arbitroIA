@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 documents = SimpleDirectoryReader("data").load_data()
 
 # === USAR IA LOCAL (HuggingFace) y evitar OpenAI ===
-embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/paraphrase-MiniLM-L3-v2")
 service_context = ServiceContext.from_defaults(llm=MockLLM(), embed_model=embed_model)
 
 # === INDEXACIÓN ===
