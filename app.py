@@ -2,28 +2,57 @@ import os
 import logging
 import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
-from llama_index import GPTVectorStoreIndex, SimpleDirectoryReader
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
-# === CARGAR TOKENS DESDE VARIABLES DE ENTORNO ===
+# LlamaIndex para lectura de documentos
+from llama_index import GPTVectorStoreIndex, SimpleDirectoryReader
+from llama_index.llms import MockLLM
+from llama_index.service_context import ServiceContext
+
+# === CONFIGURACIÓN ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
+HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"  # Puedes probar otros modelos
 
 # === CONFIGURAR LOGS ===
 logging.basicConfig(level=logging.INFO)
 
 # === CARGAR E INDEXAR DOCUMENTOS ===
 documents = SimpleDirectoryReader("data").load_data()
-index = GPTVectorStoreIndex.from_documents(documents)
+
+# Evita que LlamaIndex intente usar OpenAI
+service_context = ServiceContext.from_defaults(llm=MockLLM())
+index = GPTVectorStoreIndex.from_documents(documents, service_context=service_context)
 query_engine = index.as_query_engine()
 
-# === FUNCIÓN DE RESPUESTA AL USUARIO ===
+# === /start → MENSAJE DE BIENVENIDA ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mensaje = (
+        "👋 ¡Hola! Soy el bot de Árbitros FEXB.\n\n"
+        "🟠 Puedes preguntarme sobre:\n"
+        "- Reglamentos de baloncesto\n"
+        "- Interpretaciones técnicas\n"
+        "- Cómo redactar informes\n\n"
+        "❓ Escribe tu duda y te ayudaré."
+    )
+    await update.message.reply_text(mensaje)
+
+# === MANEJADOR DE PREGUNTAS ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pregunta = update.message.text
     contexto = query_engine.query(pregunta)
 
-    prompt = f"""Responde según este reglamento:\n{contexto}\n\nPregunta: {pregunta}"""
+    prompt = (
+        f"Responde a la siguiente pregunta basándote únicamente en este reglamento:\n\n"
+        f"{contexto}\n\n"
+        f"Pregunta: {pregunta}"
+    )
 
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     response = requests.post(
@@ -36,15 +65,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = response.json()
         respuesta = result[0]['generated_text'] if isinstance(result, list) else result.get('generated_text', 'Sin respuesta.')
     else:
-        respuesta = f"Error IA ({response.status_code})"
+        respuesta = f"⚠️ Error con la IA ({response.status_code})"
 
     await update.message.reply_text(respuesta)
 
-# === INICIAR BOT ===
+# === INICIAR EL BOT ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot funcionando correctamente.")
+    print("🤖 Árbitros Fexb Bot en marcha...")
     app.run_polling()
 
 if __name__ == '__main__':
