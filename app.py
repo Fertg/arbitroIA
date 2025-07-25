@@ -10,28 +10,32 @@ from telegram.ext import (
     filters
 )
 
-# LlamaIndex para lectura de documentos
+# LlamaIndex
 from llama_index import GPTVectorStoreIndex, SimpleDirectoryReader
 from llama_index.llms import MockLLM
+from llama_index.embeddings import HuggingFaceEmbedding
 from llama_index.service_context import ServiceContext
 
 # === CONFIGURACIÓN ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"  # Puedes probar otros modelos
+HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
 
-# === CONFIGURAR LOGS ===
+# === LOGS ===
 logging.basicConfig(level=logging.INFO)
 
-# === CARGAR E INDEXAR DOCUMENTOS ===
+# === CARGA DE DOCUMENTOS ===
 documents = SimpleDirectoryReader("data").load_data()
 
-# Evita que LlamaIndex intente usar OpenAI
-service_context = ServiceContext.from_defaults(llm=MockLLM())
+# === USAR IA LOCAL (HuggingFace) y evitar OpenAI ===
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+service_context = ServiceContext.from_defaults(llm=MockLLM(), embed_model=embed_model)
+
+# === INDEXACIÓN ===
 index = GPTVectorStoreIndex.from_documents(documents, service_context=service_context)
 query_engine = index.as_query_engine()
 
-# === /start → MENSAJE DE BIENVENIDA ===
+# === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mensaje = (
         "👋 ¡Hola! Soy el bot de Árbitros FEXB.\n\n"
@@ -43,7 +47,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(mensaje)
 
-# === MANEJADOR DE PREGUNTAS ===
+# === RESPUESTA DE IA ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pregunta = update.message.text
     contexto = query_engine.query(pregunta)
@@ -69,12 +73,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(respuesta)
 
-# === INICIAR EL BOT ===
+# === MAIN ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("🤖 Árbitros Fexb Bot en marcha...")
+    print("🤖 Árbitros FEXB Bot en marcha...")
     app.run_polling()
 
 if __name__ == '__main__':
