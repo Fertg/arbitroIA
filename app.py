@@ -30,7 +30,7 @@ logging.basicConfig(
 documents = SimpleDirectoryReader("data").load_data()
 
 # === EMBEDDING LOCAL + LLM Mock ===
-embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/paraphrase-MiniLM-L3-v2")
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 service_context = ServiceContext.from_defaults(llm=MockLLM(), embed_model=embed_model)
 index = GPTVectorStoreIndex.from_documents(documents, service_context=service_context)
 query_engine = index.as_query_engine()
@@ -63,11 +63,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"https://api-inference.huggingface.co/models/{HF_MODEL}",
             headers=headers,
             json={"inputs": prompt},
-            timeout=20  # timeout extra por si hay lentitud
+            timeout=20
         )
         if response.status_code == 200:
             result = response.json()
-            respuesta = result[0]['generated_text'] if isinstance(result, list) else result.get('generated_text', 'Sin respuesta.')
+            respuesta = (
+                result[0].get('generated_text', 'Sin respuesta.')
+                if isinstance(result, list) and len(result) > 0
+                else result.get('generated_text', 'Sin respuesta.')
+            )
         else:
             respuesta = f"⚠️ Error con la IA ({response.status_code})"
     except Exception as e:
