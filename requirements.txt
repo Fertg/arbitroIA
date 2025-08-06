@@ -1,5 +1,6 @@
 python-telegram-bot==20.7
-llama-index==0.10.20
+llama-index
 openai
-pypdf
+requests
 python-dotenv
+PyPDF2
