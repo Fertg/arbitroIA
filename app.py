@@ -1,7 +1,7 @@
 import os
 import logging
-import requests
-from telegram import Update, Bot
+import openai
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     Application,
@@ -17,10 +17,8 @@ from llama_index.service_context import ServiceContext
 
 # === CONFIGURACIÓN ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL = "tiiuae/Falcon-H1-1.5B-Instruct"
-
-
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
 # === LOGS ===
 logging.basicConfig(
@@ -40,7 +38,7 @@ query_engine = index.as_query_engine()
 # === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 ¡Hola! Soy el bot de Árbitro FEXB.\n\n"
+        "👋 ¡Hola! Soy el bot de Árbitro FEXB (con OpenAI).\n\n"
         "🟠 Puedes preguntarme sobre:\n"
         "- Reglamentos de baloncesto\n"
         "- Interpretaciones técnicas\n"
@@ -59,32 +57,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Pregunta: {pregunta}"
     )
 
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-
-    print(f"🔍 Llamando a HF: {url}")
+    print("🔍 Llamando a OpenAI")
     print(f"🔍 Prompt:\n{prompt}")
 
     try:
-        response = requests.post(
-            url,
-            headers=headers,
-            json={"inputs": prompt},
-            timeout=20
+        completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Eres un experto en reglas de baloncesto FIBA."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=500,
         )
-        print(f"🔁 STATUS: {response.status_code}")
-        print(f"🔁 RESPONSE: {response.text}")
-
-        if response.status_code == 200:
-            result = response.json()
-            respuesta = result[0]['generated_text'] if isinstance(result, list) else result.get('generated_text', 'Sin respuesta.')
-        else:
-            respuesta = f"⚠️ Error con la IA ({response.status_code})"
+        respuesta = completion['choices'][0]['message']['content']
     except Exception as e:
-        respuesta = f"❌ Error al conectar con Hugging Face: {e}"
+        print(f"❌ Error al conectar con OpenAI: {e}")
+        respuesta = "⚠️ Error al contactar con OpenAI."
 
     await update.message.reply_text(respuesta)
-
 
 # === MAIN ===
 def main():
@@ -92,7 +83,7 @@ def main():
         app: Application = ApplicationBuilder().token(TELEGRAM_TOKEN).connect_timeout(20).read_timeout(20).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        print("🤖 Árbitro FEXB Bot en marcha...")
+        print("🤖 Árbitro FEXB Bot con OpenAI en marcha...")
         app.run_polling()
     except Exception as e:
         print(f"❌ Error al iniciar el bot: {e}")

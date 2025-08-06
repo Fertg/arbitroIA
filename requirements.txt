@@ -1,10 +1,7 @@
-llama-index==0.9.48
 python-telegram-bot==20.6
-pypdf
-transformers
-sentence-transformers
-torch             
-setuptools
-python-pptx
-PyMuPDF
+openai
+llama-index==0.9.48
+PyMuPDF==1.23.7
+python-pptx==0.6.21
 requests
+sentence-transformers
