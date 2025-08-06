@@ -19,25 +19,24 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === EMBEDDINGS + LLM ===
-llm = OpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo")
-embed_model = OpenAIEmbedding(api_key=OPENAI_API_KEY)
-# Configuración global
-Settings.llm = OpenAI(model="gpt-3.5-turbo")
-Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+# === CONFIG GLOBAL LLAMAINDEX ===
+Settings.llm = OpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo")
+Settings.embed_model = OpenAIEmbedding(api_key=OPENAI_API_KEY, model="text-embedding-3-small")
 Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
 Settings.context_window = 3900
 
 # === INDEXACIÓN DE DOCUMENTOS ===
-documentos_reglamento = SimpleDirectoryReader("data", required_exts=[".pdf"], filename_as_id=True, recursive=True).load_data(
-    lambda fn: "reglas" in fn.lower() or "interpretaciones" in fn.lower())
-index_reglamento = VectorStoreIndex.from_documents(documentos_reglamento, service_context=service_context)
+documentos_reglamento = SimpleDirectoryReader(
+    "data", required_exts=[".pdf"], filename_as_id=True, recursive=True
+).load_data(lambda fn: "reglas" in fn.lower() or "interpretaciones" in fn.lower())
+index_reglamento = VectorStoreIndex.from_documents(documentos_reglamento)
 query_engine_reglamento = index_reglamento.as_query_engine()
 
-documentos_informes = SimpleDirectoryReader("data", required_exts=[".pdf"], filename_as_id=True, recursive=True).load_data(
-    lambda fn: "informes" in fn.lower())
-index_informes = VectorStoreIndex.from_documents(documentos_informes, service_context=service_context)
+documentos_informes = SimpleDirectoryReader(
+    "data", required_exts=[".pdf"], filename_as_id=True, recursive=True
+).load_data(lambda fn: "informes" in fn.lower())
+index_informes = VectorStoreIndex.from_documents(documentos_informes)
 query_engine_informes = index_informes.as_query_engine()
 
 # === COMANDOS ===
