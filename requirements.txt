@@ -1,6 +1,5 @@
 python-telegram-bot==20.7
 llama-index
-openai
+sentence-transformers
 requests
 python-dotenv
-PyPDF2
