@@ -3,10 +3,11 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters)
-from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
-from llama_index.core import ServiceContext
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
 from llama_index.llms.openai import OpenAI
+from llama_index.core import Settings
 from dotenv import load_dotenv
 
 # === CONFIGURACIÓN ===
@@ -21,7 +22,12 @@ logger = logging.getLogger(__name__)
 # === EMBEDDINGS + LLM ===
 llm = OpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo")
 embed_model = OpenAIEmbedding(api_key=OPENAI_API_KEY)
-service_context = ServiceContext.from_defaults(llm=llm, embed_model=embed_model)
+# Configuración global
+Settings.llm = OpenAI(model="gpt-3.5-turbo")
+Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
+Settings.num_output = 512
+Settings.context_window = 3900
 
 # === INDEXACIÓN DE DOCUMENTOS ===
 documentos_reglamento = SimpleDirectoryReader("data", required_exts=[".pdf"], filename_as_id=True, recursive=True).load_data(
