@@ -11,7 +11,7 @@ from telegram.ext import (
     filters,
 )
 
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.embeddings.huggingface.base import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings
 from llama_index.llms.mock import MockLLM
@@ -26,7 +26,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # === CONFIGURAR LLM y EMBEDDINGS ===
-Settings.llm = MockLLM()  # No usamos LLM interno, lo llamamos por API externa
+# Settings.llm = MockLLM()  # No usamos LLM interno, lo llamamos por API externa
 Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
