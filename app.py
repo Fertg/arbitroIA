@@ -58,26 +58,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+
+    print(f"🔍 Llamando a HF: {url}")
+    print(f"🔍 Prompt:\n{prompt}")
+
     try:
         response = requests.post(
-            f"https://api-inference.huggingface.co/models/{HF_MODEL}",
+            url,
             headers=headers,
             json={"inputs": prompt},
             timeout=20
         )
+        print(f"🔁 STATUS: {response.status_code}")
+        print(f"🔁 RESPONSE: {response.text}")
+
         if response.status_code == 200:
             result = response.json()
-            respuesta = (
-                result[0].get('generated_text', 'Sin respuesta.')
-                if isinstance(result, list) and len(result) > 0
-                else result.get('generated_text', 'Sin respuesta.')
-            )
+            respuesta = result[0]['generated_text'] if isinstance(result, list) else result.get('generated_text', 'Sin respuesta.')
         else:
             respuesta = f"⚠️ Error con la IA ({response.status_code})"
     except Exception as e:
         respuesta = f"❌ Error al conectar con Hugging Face: {e}"
 
     await update.message.reply_text(respuesta)
+
 
 # === MAIN ===
 def main():
