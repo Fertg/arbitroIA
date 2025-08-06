@@ -18,7 +18,8 @@ from llama_index.service_context import ServiceContext
 # === CONFIGURACIÓN ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL = "HuggingFaceH4/zephyr-7b-beta"
+HF_MODEL = "tiiuae/falcon-7b-instruct"
+
 
 
 # === LOGS ===
