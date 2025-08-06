@@ -4,9 +4,10 @@ import logging
 from telegram import Update
 from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters)
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
-from llama_index.core.service_context import ServiceContext
-from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core import ServiceContext, LLMPredictor, OpenAIEmbedding, PromptHelper
 from llama_index.llms.openai import OpenAI
+from llama_index.core.text_splitter import TokenTextSplitter
+from llama_index.core.node_parser import SimpleNodeParser
 from dotenv import load_dotenv
 
 # === CONFIGURACIÓN ===
