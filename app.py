@@ -1,10 +1,9 @@
 import os
 import logging
 import requests
-import time
 import threading
-from flask import Flask
 from dotenv import load_dotenv
+from flask import Flask
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,13 +14,7 @@ from telegram.ext import (
 )
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core import (
-    SimpleDirectoryReader,
-    VectorStoreIndex,
-    Settings,
-    StorageContext,
-    load_index_from_storage
-)
+from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
 
 # === VARIABLES DE ENTORNO ===
 load_dotenv()
@@ -32,16 +25,6 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === FLASK HEALTHCHECK SERVER ===
-app_flask = Flask(__name__)
-
-@app_flask.route("/health", methods=["GET"])
-def health():
-    return "OK", 200
-
-def run_flask():
-    app_flask.run(host="0.0.0.0", port=8080)
-
 # === CONFIGURACIÓN GLOBAL ===
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
@@ -50,10 +33,6 @@ Settings.embed_model = HuggingFaceEmbedding(
 Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
 Settings.context_window = 3900
-
-# === VARIABLES GLOBALES PARA MOTORES ===
-query_engine_reglamento = None
-query_engine_informes = None
 
 # === FUNCIÓN PARA CARGAR O CREAR ÍNDICE ===
 def cargar_o_crear_indice(nombre: str, filtro: str):
@@ -74,7 +53,14 @@ def cargar_o_crear_indice(nombre: str, filtro: str):
         index.storage_context.persist()
         return index
 
-# === FUNCIÓN PARA CONSULTAR HUGGING FACE ===
+# === CARGA DE ÍNDICES ===
+index_reglamento = cargar_o_crear_indice("reglamento", filtro="reglas")
+query_engine_reglamento = index_reglamento.as_query_engine()
+
+index_informes = cargar_o_crear_indice("informes", filtro="informes")
+query_engine_informes = index_informes.as_query_engine()
+
+# === FUNCIONES DE LLAMADA A HUGGING FACE ===
 def consulta_huggingface_llm(prompt: str) -> str:
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
@@ -91,7 +77,7 @@ def consulta_huggingface_llm(prompt: str) -> str:
         logger.error(f"❌ Error HF: {response.status_code} - {response.text}")
         return "❌ Error al consultar Hugging Face"
 
-# === HANDLERS TELEGRAM ===
+# === HANDLERS DE TELEGRAM ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 ¡Hola! Soy Árbitro IA FEXB.\n\n"
@@ -127,26 +113,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     respuesta = consulta_huggingface_llm(prompt)
     await update.message.reply_text(respuesta)
 
-# === MAIN ===
+# === INICIAR FLASK Y TELEGRAM A LA VEZ ===
+app = Flask(__name__)
+
+@app.route("/health")
+def health():
+    return "OK"
+
 def main():
-    global query_engine_reglamento, query_engine_informes
-
-    threading.Thread(target=run_flask, daemon=True).start()
-
-    index_reglamento = cargar_o_crear_indice("reglamento", filtro="reglas")
-    query_engine_reglamento = index_reglamento.as_query_engine()
-
-    index_informes = cargar_o_crear_indice("informes", filtro="informes")
-    query_engine_informes = index_informes.as_query_engine()
-
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("preguntar", preguntar))
-    app.add_handler(CommandHandler("informes", informes))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
+    telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("preguntar", preguntar))
+    telegram_app.add_handler(CommandHandler("informes", informes))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     logger.info("🤖 Bot Árbitro FEXB en marcha...")
-    app.run_polling()
+    telegram_app.run_polling()
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    threading.Thread(target=main).start()
+    app.run(host="0.0.0.0", port=8080)
