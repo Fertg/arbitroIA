@@ -1,6 +1,9 @@
 import os
 import logging
 import requests
+import time
+import threading
+from flask import Flask
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
@@ -14,7 +17,6 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
 
-
 # === VARIABLES DE ENTORNO ===
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -24,10 +26,20 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === CONFIGURACIÓN GLOBAL ===
+# === FLASK HEALTHCHECK SERVER ===
+app_flask = Flask(__name__)
+
+@app_flask.route("/health", methods=["GET"])
+def health():
+    return "OK", 200
+
+def run_flask():
+    app_flask.run(host="0.0.0.0", port=8080)
+
+# === CONFIGURACIÓN LLM / EMBEDDINGS ===
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
-    cache_folder="./hf_model"  # Opción para Railway (no siempre persistente)
+    cache_folder="./hf_model"
 )
 Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
@@ -59,12 +71,9 @@ query_engine_reglamento = index_reglamento.as_query_engine()
 index_informes = cargar_o_crear_indice("informes", filtro="informes")
 query_engine_informes = index_informes.as_query_engine()
 
-# === FUNCIONES DE LLAMADA A HUGGING FACE ===
+# === HUGGINGFACE CALL ===
 def consulta_huggingface_llm(prompt: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
     url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
     body = {"inputs": prompt}
 
@@ -76,7 +85,7 @@ def consulta_huggingface_llm(prompt: str) -> str:
         logger.error(f"❌ Error HF: {response.status_code} - {response.text}")
         return "❌ Error al consultar Hugging Face"
 
-# === HANDLERS DE TELEGRAM ===
+# === TELEGRAM HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 ¡Hola! Soy Árbitro IA FEXB.\n\n"
@@ -114,6 +123,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === MAIN ===
 def main():
+    # Iniciar servidor Flask en hilo separado
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    # Iniciar bot
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("preguntar", preguntar))
