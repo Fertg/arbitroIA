@@ -1,134 +1,28 @@
-import os
-import logging
-import requests
-import threading
-from dotenv import load_dotenv
-from flask import Flask
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
+# 🏀 Árbitros FES Bot – Normativa Baloncesto con IA
 
-# === VARIABLES DE ENTORNO ===
-load_dotenv()
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+Este bot de Telegram responde preguntas sobre el reglamento de baloncesto FIBA y documentos técnicos gracias a la IA de Llama.
 
-# === LOGGING ===
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
-logger = logging.getLogger(__name__)
+## 📦 Estructura
 
-# === CONFIGURACIÓN GLOBAL ===
-Settings.embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    cache_folder="./hf_model"
-)
-Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
-Settings.num_output = 512
-Settings.context_window = 3900
+├── app.py
+├── data/ # Aquí van los PDFs y PPTs con normativa
+├── requirements.txt
+├── Procfile
+├── .gitignore
 
-# === FUNCIÓN PARA CARGAR O CREAR ÍNDICE ===
-def cargar_o_crear_indice(nombre: str, filtro: str):
-    persist_dir = f"storage/{nombre}"
-    if os.path.exists(persist_dir):
-        logger.info(f"🔁 Cargando índice desde {persist_dir}")
-        storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
-        return load_index_from_storage(storage_context)
-    else:
-        logger.info(f"📄 Generando índice para {nombre}")
-        documentos = SimpleDirectoryReader(
-            "data",
-            required_exts=[".pdf"],
-            filename_as_id=True,
-            recursive=True
-        ).load_data(lambda fn: filtro in fn.lower())
-        index = VectorStoreIndex.from_documents(documentos, persist_dir=persist_dir)
-        index.storage_context.persist()
-        return index
 
-# === CARGA DE ÍNDICES ===
-index_reglamento = cargar_o_crear_indice("reglamento", filtro="reglas")
-query_engine_reglamento = index_reglamento.as_query_engine()
+## 🧠 Funcionalidades
 
-index_informes = cargar_o_crear_indice("informes", filtro="informes")
-query_engine_informes = index_informes.as_query_engine()
+- Lee los documentos locales (`informes.pdf`, `interpretaciones.pdf`, `reglas.pdf`)
+- Indexa el contenido con LlamaIndex
+- Responde preguntas por Telegram usando IA (Mistral vía Hugging Face)
 
-# === FUNCIONES DE LLAMADA A HUGGING FACE ===
-def consulta_huggingface_llm(prompt: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
-    body = {"inputs": prompt}
+### 🛠️ Requisitos
 
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code == 200:
-        result = response.json()
-        return result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "⚠️ Respuesta vacía.")
-    else:
-        logger.error(f"❌ Error HF: {response.status_code} - {response.text}")
-        return "❌ Error al consultar Hugging Face"
+- Python 3.10+
+- Tokens de Telegram y Hugging Face
+- Archivos de normativa en `data/`
 
-# === HANDLERS DE TELEGRAM ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 ¡Hola! Soy Árbitro IA FEXB.\n\n"
-        "📚 Usa /preguntar para dudas del reglamento e interpretaciones.\n"
-        "📝 Usa /informes para dudas sobre informes."
-    )
+## ✍️ Autor
 
-async def preguntar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("HAS PREGUNTADO")
-    context.user_data["modo"] = "preguntar"
-    await update.message.reply_text("Escribe tu pregunta sobre reglamento o interpretaciones:")
-
-async def informes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("INFORMES")
-    context.user_data["modo"] = "informes"
-    await update.message.reply_text("Escribe tu pregunta sobre redacción de informes:")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pregunta = update.message.text
-    modo = context.user_data.get("modo", "preguntar")
-
-    if modo == "informes":
-        contexto = query_engine_informes.query(pregunta)
-    else:
-        contexto = query_engine_reglamento.query(pregunta)
-
-    prompt = (
-        f"Responde a la siguiente pregunta basándote únicamente en este contenido:\n\n"
-        f"{contexto}\n\n"
-        f"Pregunta: {pregunta}"
-    )
-
-    respuesta = consulta_huggingface_llm(prompt)
-    await update.message.reply_text(respuesta)
-
-# === INICIAR FLASK Y TELEGRAM A LA VEZ ===
-app = Flask(__name__)
-
-@app.route("/health")
-def health():
-    return "OK"
-
-def main():
-    telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(CommandHandler("preguntar", preguntar))
-    telegram_app.add_handler(CommandHandler("informes", informes))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("🤖 Bot Árbitro FEXB en marcha...")
-    telegram_app.run_polling()
-
-if __name__ == '__main__':
-    threading.Thread(target=main).start()
-    app.run(host="0.0.0.0", port=8080)
+Desarrollado por [FerTG](https://github.com/Fertg) para Árbitros FEXB. s
