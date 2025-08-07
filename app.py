@@ -2,7 +2,6 @@ import os
 import logging
 import requests
 from dotenv import load_dotenv
-from flask import Flask
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,16 +14,13 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
 
-# === ENTORNO ===
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# === LOGGING ===
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === CONFIG GLOBAL ===
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
     cache_folder="./hf_model"
@@ -33,7 +29,6 @@ Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
 Settings.context_window = 3900
 
-# === INDEXING ===
 def cargar_o_crear_indice(nombre: str, filtro: str):
     persist_dir = f"storage/{nombre}"
     if os.path.exists(persist_dir):
@@ -58,7 +53,6 @@ query_engine_reglamento = index_reglamento.as_query_engine()
 index_informes = cargar_o_crear_indice("informes", filtro="informes")
 query_engine_informes = index_informes.as_query_engine()
 
-# === LLAMADA HUGGINGFACE ===
 def consulta_huggingface_llm(prompt: str) -> str:
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
@@ -75,19 +69,23 @@ def consulta_huggingface_llm(prompt: str) -> str:
         logger.error(f"❌ Error HF: {response.status_code} - {response.text}")
         return "❌ Error al consultar Hugging Face"
 
-# === HANDLERS TELEGRAM ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 ¡Hola! Soy Árbitro IA FEXB.\n\n"
-        "📚 Usa /preguntar para dudas del reglamento e interpretaciones.\n"
+        "👋 ¡Hola! Soy Árbitro IA FEXB.
+
+"
+        "📚 Usa /preguntar para dudas del reglamento e interpretaciones.
+"
         "📝 Usa /informes para dudas sobre informes."
     )
 
 async def preguntar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("HAS PREGUNTADO")
     context.user_data["modo"] = "preguntar"
     await update.message.reply_text("Escribe tu pregunta sobre reglamento o interpretaciones:")
 
 async def informes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("INFORMES")
     context.user_data["modo"] = "informes"
     await update.message.reply_text("Escribe tu pregunta sobre redacción de informes:")
 
@@ -101,15 +99,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         contexto = query_engine_reglamento.query(pregunta)
 
     prompt = (
-        f"Responde a la siguiente pregunta basándote únicamente en este contenido:\n\n"
-        f"{contexto}\n\n"
+        f"Responde a la siguiente pregunta basándote únicamente en este contenido:
+
+"
+        f"{contexto}
+
+"
         f"Pregunta: {pregunta}"
     )
 
     respuesta = consulta_huggingface_llm(prompt)
     await update.message.reply_text(respuesta)
 
-# === MAIN ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
