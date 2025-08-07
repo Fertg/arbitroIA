@@ -1,9 +1,8 @@
 import os
 import logging
 import requests
-import threading
-from flask import Flask
 from dotenv import load_dotenv
+from flask import Flask
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -16,16 +15,16 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
 
-# === CARGA VARIABLES ENTORNO ===
+# === ENTORNO ===
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 # === LOGGING ===
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === CONFIGURACIÓN LLAMA INDEX ===
+# === CONFIG GLOBAL ===
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
     cache_folder="./hf_model"
@@ -34,7 +33,7 @@ Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
 Settings.context_window = 3900
 
-# === CARGA O CREACIÓN DE ÍNDICE ===
+# === INDEXING ===
 def cargar_o_crear_indice(nombre: str, filtro: str):
     persist_dir = f"storage/{nombre}"
     if os.path.exists(persist_dir):
@@ -53,14 +52,13 @@ def cargar_o_crear_indice(nombre: str, filtro: str):
         index.storage_context.persist()
         return index
 
-# === ÍNDICES ===
 index_reglamento = cargar_o_crear_indice("reglamento", filtro="reglas")
 query_engine_reglamento = index_reglamento.as_query_engine()
 
 index_informes = cargar_o_crear_indice("informes", filtro="informes")
 query_engine_informes = index_informes.as_query_engine()
 
-# === CONSULTA A HUGGING FACE ===
+# === LLAMADA HUGGINGFACE ===
 def consulta_huggingface_llm(prompt: str) -> str:
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
@@ -77,7 +75,7 @@ def consulta_huggingface_llm(prompt: str) -> str:
         logger.error(f"❌ Error HF: {response.status_code} - {response.text}")
         return "❌ Error al consultar Hugging Face"
 
-# === HANDLERS DE TELEGRAM ===
+# === HANDLERS TELEGRAM ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 ¡Hola! Soy Árbitro IA FEXB.\n\n"
@@ -86,12 +84,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def preguntar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("HAS PREGUNTADO")
     context.user_data["modo"] = "preguntar"
     await update.message.reply_text("Escribe tu pregunta sobre reglamento o interpretaciones:")
 
 async def informes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("INFORMES")
     context.user_data["modo"] = "informes"
     await update.message.reply_text("Escribe tu pregunta sobre redacción de informes:")
 
@@ -113,7 +109,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     respuesta = consulta_huggingface_llm(prompt)
     await update.message.reply_text(respuesta)
 
-# === INICIO DEL BOT ===
+# === MAIN ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -123,15 +119,5 @@ def main():
     logger.info("🤖 Bot Árbitro FEXB en marcha...")
     app.run_polling()
 
-# === FLASK PARA RAILWAY ===
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def healthcheck():
-    return "✅ Árbitro FEXB en ejecución", 200
-
-# === INICIO APP PRINCIPAL ===
-if __name__ == "__main__":
-    bot_thread = threading.Thread(target=main)
-    bot_thread.start()
-    flask_app.run(host="0.0.0.0", port=8080)
+if __name__ == '__main__':
+    main()
