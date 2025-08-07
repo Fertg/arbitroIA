@@ -1,7 +1,8 @@
 python-telegram-bot==20.7
 requests==2.31.0
 python-dotenv==1.0.1
-llama-index==0.10.33
+llama-index==0.13.0
+llama-index-embeddings-huggingface==0.1.5
 transformers==4.41.1
 torch==2.2.2
 sentence-transformers==2.7.0
