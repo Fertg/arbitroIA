@@ -10,61 +10,73 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
-from llama_index.embeddings.huggingface.base import HuggingFaceEmbedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings
+from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
 from llama_index.llms.mock import MockLLM
 
-# === CARGAR VARIABLES DE ENTORNO ===
+# === VARIABLES DE ENTORNO ===
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")  # Hugging Face token
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 # === LOGGING ===
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === CONFIGURAR LLM y EMBEDDINGS ===
-# Settings.llm = MockLLM()  # No usamos LLM interno, lo llamamos por API externa
-Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# === CONFIGURACIÓN GLOBAL ===
+Settings.embed_model = HuggingFaceEmbedding(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    cache_folder="./hf_model"  # Opción para Railway (no siempre persistente)
+)
 Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 Settings.num_output = 512
 Settings.context_window = 3900
 
-# === FUNCIONES PARA CONSULTAR HUGGING FACE ===
+# === FUNCIÓN PARA CARGAR O CREAR ÍNDICE ===
+def cargar_o_crear_indice(nombre: str, filtro: str):
+    persist_dir = f"storage/{nombre}"
+    if os.path.exists(persist_dir):
+        logger.info(f"🔁 Cargando índice desde {persist_dir}")
+        storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
+        return load_index_from_storage(storage_context)
+    else:
+        logger.info(f"📄 Generando índice para {nombre}")
+        documentos = SimpleDirectoryReader(
+            "data",
+            required_exts=[".pdf"],
+            filename_as_id=True,
+            recursive=True
+        ).load_data(lambda fn: filtro in fn.lower())
+        index = VectorStoreIndex.from_documents(documentos, persist_dir=persist_dir)
+        index.storage_context.persist()
+        return index
+
+# === CARGA DE ÍNDICES ===
+index_reglamento = cargar_o_crear_indice("reglamento", filtro="reglas")
+query_engine_reglamento = index_reglamento.as_query_engine()
+
+index_informes = cargar_o_crear_indice("informes", filtro="informes")
+query_engine_informes = index_informes.as_query_engine()
+
+# === FUNCIONES DE LLAMADA A HUGGING FACE ===
 def consulta_huggingface_llm(prompt: str) -> str:
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json"
     }
     url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
-    body = {
-        "inputs": prompt
-    }
+    body = {"inputs": prompt}
 
     response = requests.post(url, headers=headers, json=body)
     if response.status_code == 200:
         result = response.json()
         return result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "⚠️ Respuesta vacía.")
     else:
-        logger.error(f"Error HF: {response.status_code} - {response.text}")
+        logger.error(f"❌ Error HF: {response.status_code} - {response.text}")
         return "❌ Error al consultar Hugging Face"
 
-# === CARGAR DOCUMENTOS E INDEXAR ===
-documentos_reglamento = SimpleDirectoryReader("data", required_exts=[".pdf"], filename_as_id=True, recursive=True).load_data(
-    lambda fn: "reglas" in fn.lower() or "interpretaciones" in fn.lower()
-)
-index_reglamento = VectorStoreIndex.from_documents(documentos_reglamento)
-query_engine_reglamento = index_reglamento.as_query_engine()
-
-documentos_informes = SimpleDirectoryReader("data", required_exts=[".pdf"], filename_as_id=True, recursive=True).load_data(
-    lambda fn: "informes" in fn.lower()
-)
-index_informes = VectorStoreIndex.from_documents(documentos_informes)
-query_engine_informes = index_informes.as_query_engine()
-
-# === HANDLERS DE COMANDOS ===
+# === HANDLERS DE TELEGRAM ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 ¡Hola! Soy Árbitro IA FEXB.\n\n"
