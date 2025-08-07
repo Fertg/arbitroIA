@@ -130,5 +130,12 @@ def main():
     telegram_app.run_polling()
 
 if __name__ == '__main__':
-    threading.Thread(target=main).start()
+    import threading
+
+    # Iniciar el bot en un hilo separado
+    bot_thread = threading.Thread(target=main)
+    bot_thread.start()
+
+    # Mantener Flask vivo
     app.run(host="0.0.0.0", port=8080)
+
