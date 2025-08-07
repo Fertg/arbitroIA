@@ -13,7 +13,7 @@ from telegram.ext import (
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
-from llama_index.llms.mock import MockLLM
+
 
 # === VARIABLES DE ENTORNO ===
 load_dotenv()
